@@ -18,7 +18,7 @@ app.get("/metadata", async (req, res) => {
     const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
 
     const response = await fetch(
-      `https://tiktok-scraper7.p.rapidapi.com/video/info?url=${encodeURIComponent(url)}&hd=1`,
+     `https://tiktok-scraper7.p.rapidapi.com/?url=${encodeURIComponent(url)}&hd=1`,
       {
         headers: {
           "x-rapidapi-host": "tiktok-scraper7.p.rapidapi.com",
