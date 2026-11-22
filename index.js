@@ -13,58 +13,42 @@ app.get("/metadata", async (req, res) => {
 
   try {
     const response = await fetch(
-      `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
-      { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } }
+      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "application/json",
+        },
+      }
     );
 
-    if (!response.ok) throw new Error("noembed failed");
+    if (!response.ok) throw new Error(`oEmbed failed: ${response.status}`);
 
     const data = await response.json();
 
-    if (!data?.title || data?.error) throw new Error("no data");
+    const html = data.html || "";
+    const title = data.title || "";
 
-    const description = data.title || "";
-    const hashtags = [...description.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
-    const authorHandle = data.author_url
-      ? "@" + data.author_url.split("/").filter(Boolean).pop()
+    const hashtagsFromHtml = [...html.matchAll(/\/tag\/([\w]+)\?/g)].map(m => `#${m[1]}`);
+    const hashtagsFromTitle = [...title.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
+    const hashtags = [...new Set([...hashtagsFromHtml, ...hashtagsFromTitle])];
+
+    const authorUrl = data.author_url || "";
+    const authorHandle = authorUrl
+      ? "@" + authorUrl.split("/").filter(Boolean).pop()
       : "";
 
     return res.json({
       thumbnail: data.thumbnail_url || "",
-      description,
+      description: title,
       author: data.author_name || "TikTok",
       authorHandle,
       hashtags,
     });
 
-  } catch {
-    // Fallback to TikTok oEmbed directly
-    try {
-      const response = await fetch(
-        `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
-        { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } }
-      );
-
-      if (!response.ok) throw new Error("oembed failed");
-
-      const data = await response.json();
-      const description = data.title || "";
-      const hashtags = [...description.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
-      const authorHandle = data.author_url
-        ? "@" + data.author_url.split("/").filter(Boolean).pop()
-        : "";
-
-      return res.json({
-        thumbnail: data.thumbnail_url || "",
-        description,
-        author: data.author_name || "TikTok",
-        authorHandle,
-        hashtags,
-      });
-
-    } catch {
-      return res.json({ error: "Could not fetch metadata" });
-    }
+  } catch (err) {
+    console.log("oEmbed error:", err.message);
+    return res.json({ error: err.message, thumbnail: "", description: "", author: "TikTok", authorHandle: "", hashtags: [] });
   }
 });
 
