@@ -22,17 +22,11 @@ app.get("/metadata", async (req, res) => {
       }
     );
 
-    if (!response.ok) throw new Error(`oEmbed failed: ${response.status} ${await response.text()}`);
+    if (!response.ok) throw new Error(`oEmbed failed: ${response.status}`);
 
     const data = await response.json();
-
-    const html = data.html || "";
     const title = data.title || "";
-
-    const hashtagsFromHtml = [...html.matchAll(/\/tag\/([\w]+)\?/g)].map(m => `#${m[1]}`);
-    const hashtagsFromTitle = [...title.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
-    const hashtags = [...new Set([...hashtagsFromHtml, ...hashtagsFromTitle])];
-
+    const hashtags = [...title.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
     const authorUrl = data.author_url || "";
     const authorHandle = authorUrl
       ? "@" + authorUrl.split("/").filter(Boolean).pop()
@@ -47,11 +41,8 @@ app.get("/metadata", async (req, res) => {
     });
 
   } catch (err) {
-    console.log("oEmbed error:", err.message);
     return res.json({ error: err.message, thumbnail: "", description: "", author: "TikTok", authorHandle: "", hashtags: [] });
   }
 });
 
-app.get("/", (req, res) => res.json({ status: "ok" }));
-
-app.listen(PORT, () => console.log(`Metadata server running on port ${PORT}`));
+app.get("/debug", async (req,
