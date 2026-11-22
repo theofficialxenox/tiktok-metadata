@@ -10,29 +10,40 @@ app.use((req, res, next) => {
 app.get("/metadata", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.json({ error: "No URL provided" });
+
   try {
-    const response = await fetch(
-      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "application/json",
-        },
-      }
-    );
-    if (!response.ok) throw new Error(`oEmbed failed: ${response.status}`);
-    const data = await response.json();
-    const title = data.title || "";
-    const hashtags = [...title.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
-    const authorUrl = data.author_url || "";
-    const authorHandle = authorUrl ? "@" + authorUrl.split("/").filter(Boolean).pop() : "";
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+    });
+
+    if (!response.ok) throw new Error(`Page fetch failed: ${response.status}`);
+
+    const html = await response.text();
+
+    // Try og tags
+    const title = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/)?.[1] || "";
+    const description = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/)?.[1] || title;
+    const thumbnail = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/)?.[1] || "";
+
+    // Author from title (format: "Name on TikTok" or "@handle")
+    const authorFromTitle = title.match(/^(.+?)\s+on TikTok/i)?.[1] || "";
+    const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
+
+    const hashtags = [...description.matchAll(/#([\w]+)/g)].map(m => `#${m[1]}`);
+
     return res.json({
-      thumbnail: data.thumbnail_url || "",
-      description: title,
-      author: data.author_name || "TikTok",
-      authorHandle,
+      thumbnail,
+      description,
+      author: authorFromTitle || handleFromUrl || "TikTok",
+      authorHandle: handleFromUrl ? `@${handleFromUrl}` : "",
       hashtags,
     });
+
   } catch (err) {
     return res.json({ error: err.message, thumbnail: "", description: "", author: "TikTok", authorHandle: "", hashtags: [] });
   }
@@ -41,17 +52,15 @@ app.get("/metadata", async (req, res) => {
 app.get("/debug", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.json({ error: "No URL" });
-  const response = await fetch(
-    `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
-    {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-      },
-    }
-  );
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+    redirect: "follow",
+  });
   const text = await response.text();
-  return res.json({ status: response.status, body: text });
+  return res.json({ status: response.status, length: text.length, snippet: text.slice(0, 2000) });
 });
 
 app.get("/", (req, res) => res.json({ status: "ok" }));
