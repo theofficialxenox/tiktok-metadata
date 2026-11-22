@@ -22,7 +22,7 @@ app.get("/metadata", async (req, res) => {
       }
     );
 
-    if (!response.ok) throw new Error(`oEmbed failed: ${response.status}`);
+    if (!response.ok) throw new Error(`oEmbed failed: ${response.status} ${await response.text()}`);
 
     const data = await response.json();
 
