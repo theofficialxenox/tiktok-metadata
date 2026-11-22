@@ -3,6 +3,7 @@ const fetch = require("node-fetch");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const RAPIDAPI_KEY = "a2c81aaf53msha8b0f7a69633dc9p139bc7jsna7b197343552";
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -16,39 +17,38 @@ app.get("/metadata", async (req, res) => {
   try {
     const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
 
-    // Try Noembed
-    const noembedRes = await fetch(
-      `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
+    const response = await fetch(
+      `https://tiktok-scraper7.p.rapidapi.com/video/info?url=${encodeURIComponent(url)}&hd=1`,
       {
         headers: {
-          "User-Agent": "Mozilla/5.0",
+          "x-rapidapi-host": "tiktok-scraper7.p.rapidapi.com",
+          "x-rapidapi-key": RAPIDAPI_KEY,
         },
       }
     );
 
-    if (noembedRes.ok) {
-      const data = await noembedRes.json();
+    const json = await response.json();
 
-      if (data.title && !data.error) {
-        const hashtags = (data.title || "").match(/#\w+/g) || [];
-
-        return res.json({
-          thumbnail: data.thumbnail_url || "",
-          description: data.title || "",
-          author: data.author_name || handleFromUrl || "TikTok",
-          authorHandle: handleFromUrl,
-          hashtags,
-        });
-      }
+    if (json.code !== 0 || !json.data) {
+      return res.json({
+        thumbnail: "",
+        description: "",
+        author: handleFromUrl || "TikTok",
+        authorHandle: handleFromUrl,
+        hashtags: [],
+      });
     }
 
-    // Fallback: return what we can from the URL
+    const data = json.data;
+    const title = data.title || "";
+    const hashtags = title.match(/#\w+/g) || [];
+
     return res.json({
-      thumbnail: "",
-      description: "",
-      author: handleFromUrl || "TikTok",
-      authorHandle: handleFromUrl,
-      hashtags: [],
+      thumbnail: data.cover || "",
+      description: title.replace(/#\w+/g, "").trim(),
+      author: data.author?.nickname || handleFromUrl || "TikTok",
+      authorHandle: data.author?.unique_id || handleFromUrl,
+      hashtags,
     });
 
   } catch (err) {
