@@ -16,7 +16,7 @@ app.get("/metadata", async (req, res) => {
   let browser;
   try {
     browser = await puppeteer.launch({
-      headless: "new",
+      headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -35,14 +35,15 @@ app.get("/metadata", async (req, res) => {
     const metadata = await page.evaluate(() => {
       const getMeta = (prop) =>
         document.querySelector(`meta[property="${prop}"]`)?.content ||
-        document.querySelector(`meta[name="${prop}"]`)?.content || "";
+        document.querySelector(`meta[name="${prop}"]`)?.content ||
+        "";
 
       const title = getMeta("og:title");
       const description = getMeta("og:description");
       const thumbnail = getMeta("og:image");
 
       const hashtags = [...document.querySelectorAll('a[href*="/tag/"]')]
-        .map(a => {
+        .map((a) => {
           const match = a.href.match(/\/tag\/([\w]+)/);
           return match ? `#${match[1]}` : null;
         })
@@ -59,3 +60,18 @@ app.get("/metadata", async (req, res) => {
       thumbnail: metadata.thumbnail,
       description: metadata.description || metadata.title,
       author: metadata.authorFromTitle || handleFromUrl || "TikTok",
+      authorHandle: handleFromUrl,
+      hashtags: metadata.hashtags || [],
+    });
+
+  } catch (err) {
+    console.error("Puppeteer error:", err.message);
+    return res.json({ error: "Failed to fetch metadata", detail: err.message });
+  } finally {
+    if (browser) await browser.close();
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Metadata server running on port ${PORT}`);
+});
