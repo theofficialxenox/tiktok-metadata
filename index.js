@@ -14,58 +14,41 @@ app.get("/metadata", async (req, res) => {
   if (!url) return res.json({ error: "No URL provided" });
 
   try {
-    // Try oEmbed first
-    const oembedRes = await fetch(
-      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+    const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
+
+    // Try Noembed
+    const noembedRes = await fetch(
+      `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
       {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "User-Agent": "Mozilla/5.0",
         },
       }
     );
 
-    if (oembedRes.ok) {
-      const data = await oembedRes.json();
+    if (noembedRes.ok) {
+      const data = await noembedRes.json();
 
-      const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
-      const hashtags = (data.title || "").match(/#\w+/g) || [];
+      if (data.title && !data.error) {
+        const hashtags = (data.title || "").match(/#\w+/g) || [];
 
-      return res.json({
-        thumbnail: data.thumbnail_url || "",
-        description: data.title || "",
-        author: data.author_name || handleFromUrl || "TikTok",
-        authorHandle: handleFromUrl,
-        hashtags,
-      });
+        return res.json({
+          thumbnail: data.thumbnail_url || "",
+          description: data.title || "",
+          author: data.author_name || handleFromUrl || "TikTok",
+          authorHandle: handleFromUrl,
+          hashtags,
+        });
+      }
     }
 
-    // Fallback: scrape open graph tags
-    const pageRes = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-      },
-    });
-
-    const html = await pageRes.text();
-
-    const getMeta = (prop) => {
-      const match = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))
-        || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, "i"));
-      return match?.[1] || "";
-    };
-
-    const title = getMeta("og:title");
-    const description = getMeta("og:description");
-    const thumbnail = getMeta("og:image");
-    const hashtags = (title + " " + description).match(/#\w+/g) || [];
-    const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
-
+    // Fallback: return what we can from the URL
     return res.json({
-      thumbnail,
-      description: description || title,
+      thumbnail: "",
+      description: "",
       author: handleFromUrl || "TikTok",
       authorHandle: handleFromUrl,
-      hashtags,
+      hashtags: [],
     });
 
   } catch (err) {
