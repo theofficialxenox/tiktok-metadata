@@ -1,5 +1,5 @@
 const express = require("express");
-const puppeteer = require("puppeteer");
+const fetch = require("node-fetch");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,63 +13,64 @@ app.get("/metadata", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.json({ error: "No URL provided" });
 
-  let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: "/opt/render/.cache/puppeteer/chrome/linux-148.0.7778.97/chrome-linux64/chrome",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    });
-
-    const page = await browser.newPage();
-    await page.setUserAgent(
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+    // Try oEmbed first
+    const oembedRes = await fetch(
+      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+      }
     );
 
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+    if (oembedRes.ok) {
+      const data = await oembedRes.json();
 
-    const metadata = await page.evaluate(() => {
-      const getMeta = (prop) =>
-        document.querySelector(`meta[property="${prop}"]`)?.content ||
-        document.querySelector(`meta[name="${prop}"]`)?.content ||
-        "";
+      const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
+      const hashtags = (data.title || "").match(/#\w+/g) || [];
 
-      const title = getMeta("og:title");
-      const description = getMeta("og:description");
-      const thumbnail = getMeta("og:image");
+      return res.json({
+        thumbnail: data.thumbnail_url || "",
+        description: data.title || "",
+        author: data.author_name || handleFromUrl || "TikTok",
+        authorHandle: handleFromUrl,
+        hashtags,
+      });
+    }
 
-      const hashtags = [...document.querySelectorAll('a[href*="/tag/"]')]
-        .map((a) => {
-          const match = a.href.match(/\/tag\/([\w]+)/);
-          return match ? `#${match[1]}` : null;
-        })
-        .filter(Boolean);
-
-      const authorFromTitle = title.match(/^(.+?)\s+on TikTok/i)?.[1] || "";
-
-      return { title, description, thumbnail, hashtags, authorFromTitle };
+    // Fallback: scrape open graph tags
+    const pageRes = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      },
     });
 
+    const html = await pageRes.text();
+
+    const getMeta = (prop) => {
+      const match = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))
+        || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, "i"));
+      return match?.[1] || "";
+    };
+
+    const title = getMeta("og:title");
+    const description = getMeta("og:description");
+    const thumbnail = getMeta("og:image");
+    const hashtags = (title + " " + description).match(/#\w+/g) || [];
     const handleFromUrl = url.match(/@([\w.]+)/)?.[1] || "";
 
     return res.json({
-      thumbnail: metadata.thumbnail,
-      description: metadata.description || metadata.title,
-      author: metadata.authorFromTitle || handleFromUrl || "TikTok",
+      thumbnail,
+      description: description || title,
+      author: handleFromUrl || "TikTok",
       authorHandle: handleFromUrl,
-      hashtags: metadata.hashtags || [],
+      hashtags,
     });
 
   } catch (err) {
-    console.error("Puppeteer error:", err.message);
+    console.error("Metadata error:", err.message);
     return res.json({ error: "Failed to fetch metadata", detail: err.message });
-  } finally {
-    if (browser) await browser.close();
   }
 });
 
